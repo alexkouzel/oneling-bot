@@ -30,12 +30,14 @@ You can control me by sending these commands:
 /remove {value} - remove a reminder
 /list - list all reminders
 /clear - clear all reminders
-/set_intervals {intervals} - set reminder intervals (also clears reminders)
-/show_intervals - display current reminder intervals
+/set_intervals {intervals} - set intervals (also clears reminders)
+/show_intervals - display current intervals
 
-The default intervals are '5m 30m 2h 12h 2d', which means a reminder will first occur after 5 min, then after 30 min, etc.
+**Default Intervals:**
+The default reminder intervals are 5m 30m 2h 12h 2d, meaning a reminder will trigger first after 5 minutes, then after 30 minutes, and so on.
 
-Also, for adding a new reminder you can just write the value in the chat without using /add.
+**Quick Tip:**
+To add a new reminder, simply type the value in the chat without needing to use the /add command.
 
 """
 
@@ -130,19 +132,19 @@ async def set_intervals_command(update: Update, context: ContextTypes.DEFAULT_TY
     intervals = [str_to_time(arg) for arg in context.args]
 
     if len(intervals) == 0 or any(time == -1 for time in intervals):
-        await update.message.reply_text("Invalid reminder intervals. Try again")
+        await update.message.reply_text("Invalid intervals. Try again")
         return
 
     chat_id = update.effective_chat.id
     repository.update_intervals(chat_id, intervals)
     repository.clear_entries(chat_id)
 
-    await update.message.reply_text("Your reminder intervals are updated")
+    await update.message.reply_text("Your intervals are updated")
 
 
 async def show_intervals_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     intervals = " ".join([time_to_str(time) for time in get_chat(update).intervals])
-    await update.message.reply_text("Your reminder intervals: " + intervals)
+    await update.message.reply_text("Your intervals: " + intervals)
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
