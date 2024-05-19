@@ -2,7 +2,7 @@ import logging
 import time
 
 from telegram import Update
-from telegram.error import NetworkError
+from telegram.error import Conflict
 from telegram.ext import (
     filters,
     MessageHandler,
@@ -145,23 +145,28 @@ async def show_intervals_command(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text("Your reminder intervals: " + intervals)
 
 
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        raise context.error
+    except Conflict:
+        # ignore conflicts as they occur during redeploys
+        return
+
+
 def main(token: str):
-    while True:
-        try:
-            app = ApplicationBuilder().token(token).build()
+    app = ApplicationBuilder().token(token).build()
 
-            app.job_queue.run_repeating(reminder, interval=1)
+    app.job_queue.run_repeating(reminder, interval=1)
 
-            app.add_handler(CommandHandler(["start", "help"], help_command))
-            app.add_handler(CommandHandler("add", add_command))
-            app.add_handler(CommandHandler("remove", remove_command))
-            app.add_handler(CommandHandler("list", list_command))
-            app.add_handler(CommandHandler("clear", clear_command))
-            app.add_handler(CommandHandler("set_intervals", set_intervals_command))
-            app.add_handler(CommandHandler("show_intervals", show_intervals_command))
-            app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message))
+    app.add_handler(CommandHandler(["start", "help"], help_command))
+    app.add_handler(CommandHandler("add", add_command))
+    app.add_handler(CommandHandler("remove", remove_command))
+    app.add_handler(CommandHandler("list", list_command))
+    app.add_handler(CommandHandler("clear", clear_command))
+    app.add_handler(CommandHandler("set_intervals", set_intervals_command))
+    app.add_handler(CommandHandler("show_intervals", show_intervals_command))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message))
 
-            app.run_polling()
+    app.add_error_handler(error_handler)
 
-        except Exception:
-            time.sleep(10)
+    app.run_polling()

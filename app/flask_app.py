@@ -9,5 +9,5 @@ def health_check():
     return jsonify(status="UP"), 200
 
 
-def main():
-    serve(app, host="0.0.0.0", port=80)
+def main(port: int):
+    serve(app, host="0.0.0.0", port=port)
