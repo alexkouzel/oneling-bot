@@ -4,11 +4,14 @@ MAX_NUMBER_LEN = 3
 
 
 def time_to_str(value: int) -> str:
+    if value < 0:
+        return '-'
+    
     for unit_str, unit_sec in TIME_UNITS:
         if value >= unit_sec:
             return f"{value // unit_sec}{unit_str}"
 
-    return "-"  # should not happen
+    return "-"
 
 
 def str_to_time_by_unit(val: str, unit) -> int:
