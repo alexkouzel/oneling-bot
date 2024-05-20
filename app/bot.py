@@ -24,13 +24,12 @@ logging.basicConfig(
 repository = Repository()
 
 help_message = """
-
 You can control me by sending these commands:
 
 /list - list reminders
 /clear - clear reminders
-/set_intervals {intervals} - set reminder intervals
-/show_intervals - show reminder intervals
+/set_intervals {intervals} - set intervals
+/show_intervals - show intervals
 
 <b>Default Intervals</b>
 The default intervals are '5m 30m 2h 12h 2d', meaning a reminder will trigger first after 5 minutes, then after 30 minutes, and so on.
