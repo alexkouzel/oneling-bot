@@ -12,10 +12,10 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from models import Chat, Entry
-from repository import Repository
-from utils import time_to_str, str_to_time
-from linguee.linguee_api import translations
+from oneling.models import Chat, Entry
+from oneling.repository import Repository
+from oneling.utils import time_to_str, str_to_time
+from linguee.api import translations
 
 
 logging.basicConfig(
@@ -68,7 +68,7 @@ def entry_info(chat: Chat, entry: Entry) -> str:
 
 
 # ----------------------------------------------------------------
-#  Inline Keyboards
+#  Markups
 # ----------------------------------------------------------------
 
 
@@ -200,24 +200,23 @@ async def show_intervals_command(update: Update, context: ContextTypes.DEFAULT_T
     intervals = [time_to_str(time) for time in get_chat(update).intervals]
     intervals = " ".join(intervals)
 
-    await update.message.reply_text("Your intervals: " + intervals)
+    await update.message.reply_text("Intervals: " + intervals)
 
 
+# --------- Example of Linguee usage ---------
 async def en_to_nl_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = " ".join(context.args)
     lemmas = await translations(query, "en", "nl")
-    
+
     if not lemmas:
-        await update.message.reply_text('No translations found. Try again')
-        return        
+        await update.message.reply_text("No translations found. Try again")
+        return
 
     lm = lemmas[0]
     tr = lm.translations[0]
 
     examples = (
-        ""
-        if not tr.examples
-        else "\n".join(["- " + ex.dst for ex in tr.examples])
+        "" if not tr.examples else "\n".join(["- " + ex.dst for ex in tr.examples])
     )
     await update.message.reply_text(f"{lm.text} - {tr.text}\n\n{examples}")
 
@@ -236,11 +235,11 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ----------------------------------------------------------------
-#  Application Runner
+#  Bot Runner
 # ----------------------------------------------------------------
 
 
-def main(token: str):
+def run(token: str):
     app = ApplicationBuilder().token(token).build()
 
     app.job_queue.run_repeating(reminder, interval=1)
