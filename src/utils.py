@@ -1,9 +1,7 @@
 TIME_UNITS = [("d", 86400), ("h", 3600), ("m", 60), ("s", 1)]
 
-MAX_NUMBER_LEN = 3
 
-
-def time_to_str(value: int) -> str:
+def time_to_text(value: int) -> str:
     if value < 0:
         return "-"
 
@@ -14,17 +12,17 @@ def time_to_str(value: int) -> str:
     return "-"
 
 
-def str_to_time_by_unit(val: str, unit) -> int:
+def text_to_time_by_unit(text: str, unit) -> int:
     (unit_str, unit_sec) = unit
 
     # verify value min size
-    if len(val) <= len(unit_str):
+    if len(text) <= len(unit_str):
         return -1
 
-    time_str = val[: -len(unit_str)]
+    time_str = text[: -len(unit_str)]
 
-    # verify that time is not too long
-    if len(time_str) > MAX_NUMBER_LEN:
+    # verify that time is not too long (>3 symbols)
+    if len(time_str) > 3:
         return -1
 
     try:
@@ -42,9 +40,9 @@ def str_to_time_by_unit(val: str, unit) -> int:
         return -1
 
 
-def str_to_time(val: str) -> int:
-    if not len(val) == 0:
+def text_to_time(text: str) -> int:
+    if not len(text) == 0:
         for unit in TIME_UNITS:
-            if val[-1] == unit[0]:
-                return str_to_time_by_unit(val, unit)
+            if text[-1] == unit[0]:
+                return text_to_time_by_unit(text, unit)
     return -1

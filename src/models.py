@@ -7,7 +7,15 @@ class Entry:
     chat_id: int
     last_reminded_at: int
     reminders_left: int
-    value: str
+    src: str
+    dst: str
+    examples: list[str]
+
+
+@dataclass
+class Dictionary:
+    src: str
+    dst: str
 
 
 @dataclass
@@ -16,3 +24,7 @@ class Chat:
     next_idx: int
     entries: dict[str, Entry]
     intervals: list[int]
+    dictionary: Dictionary
+
+    def get_interval(self, entry: Entry):
+        return self.intervals[-entry.reminders_left]

@@ -1,5 +1,6 @@
-from oneling.models import Chat, Entry
 import time
+
+from models import Entry, Chat, Dictionary
 
 
 class Repository:
@@ -9,7 +10,7 @@ class Repository:
     def get_all_chats(self):
         return self.chats
 
-    def remind_entry(self, entry: Entry):
+    def handle_entry_reminder(self, entry: Entry):
         chat = self.chats[entry.chat_id]
         entry.reminders_left -= 1
 
@@ -18,7 +19,12 @@ class Repository:
         else:
             entry.last_reminded_at = time.time()
 
-    def add_entry(self, chat: Chat, entry: Entry):
+    def add_entry(self, chat_id: int, entry: Entry):
+        chat = self.chats[chat_id]
+
+        # remove previous entry with the same src (if exists)
+        chat.entries = {idx: e for idx, e in chat.entries.items() if e.src != entry.src}
+
         chat.entries[entry.idx] = entry
         chat.next_idx += 1
 
@@ -37,9 +43,15 @@ class Repository:
     def update_intervals(self, chat_id: int, intervals: list[int]):
         self.get_chat(chat_id).intervals = intervals
 
+    def update_dictionary(self, chat_id: int, dictionary: Dictionary):
+        self.get_chat(chat_id).dictionary = dictionary
+
     def get_chat(self, id: int):
         if id not in self.chats:
-            intervals = [h * 60 for h in [5, 30, 120, 720, 2880]]
-            self.chats[id] = Chat(id, 0, {}, intervals)
+
+            default_intervals = [h * 60 for h in [5, 30, 120, 720, 2880]]
+            default_dictionary = Dictionary("en", "nl")
+
+            self.chats[id] = Chat(id, 0, {}, default_intervals, default_dictionary)
 
         return self.chats[id]
