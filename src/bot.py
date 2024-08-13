@@ -80,7 +80,7 @@ def get_chat(update: Update) -> Chat:
 def get_help_message(chat: Chat):
     return f"""
 
-I can help you to remember words and phrases in different languages by sending you reminders at specified intervals.
+I can help you to remember words and phrases in different languages with scheduled reminders.
 
 <b>🔔  To manage reminders:</b>
 /show_reminders - show all reminders
