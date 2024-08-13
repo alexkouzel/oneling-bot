@@ -1,28 +1,27 @@
 # 📚 Oneling Bot
 
-Oneling Bot is a Telegram bot designed to help you memorize information using regular reminders. This method optimizes retention through spaced repetition.
+Oneling Bot is a Telegram bot designed to help you learn and remember words in different languages. By setting up reminders, it makes it easy to keep new vocabulary in mind.
 
-## 🔥 Features
+## Getting Started
 
-- **List Reminders:** `/list`
-- **Clear Reminders:** `/clear`
-- **Set Intervals:** `/set_intervals {intervals}`
-- **Show Intervals:** `/show_intervals`
+To start using Oneling Bot, simply search for the bot by its username [@onelingbot](https://t.me/onelingbot) on Telegram or click [here](https://t.me/onelingbot) to chat directly.
 
-The default intervals are '5m 30m 2h 12h 2d', meaning a reminder will trigger first after 5 minutes, then after 30 minutes, and so on.
+## Functionality
 
-To add a new reminder, simply type the value in the chat.
+### 🔔 To manage reminders:
+- /show_reminders - show all reminders
+- /clear_reminders - clear all reminders
 
-## ✨ How it Helps
+> To set a new reminder, simply type the word or phrase you want to remember directly in the chat.
 
-Oneling Bot is particularly useful for learning new languages:
+### ⏰ To manage interval:
+- /show_intervals - show current intervals
+- /set_intervals - set new intervals
+- /reset_intervals - reset intervals to default values
+  
+> Note: Changing intervals will automatically clear all existing reminders, as they rely on the previous intervals.
 
-- **Expand Vocabulary:** add new words and phrases to your reminders.
-- **Remember Grammar Rules:** set reminders for grammar rules and usage examples.
-- **Practice Translations:** regularly review translations to reinforce learning.
-
-## 🚀 Getting Started
-
-1. Add the bot to your Telegram.
-2. Start a chat with the bot.
-3. Use the commands to manage your reminders.
+### 🌐 To manage dictionary:
+- /show_dictionary - show current dictionary
+- /choose_dictionary - choose new dictionary
+- /switch_dictionary - switch source and destination languages

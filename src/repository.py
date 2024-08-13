@@ -41,8 +41,8 @@ class Repository:
 
     def handle_reminder_call(self, chat_id: int, reminder_id: int) -> None:
         chat = self.get_chat(chat_id)
-        reminder = chat.reminders[reminder_id]
 
+        reminder = chat.reminders[reminder_id]
         reminder.left -= 1
 
         if reminder.left == 0:

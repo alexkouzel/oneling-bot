@@ -1,5 +1,7 @@
 TIME_UNITS = [("d", 86400), ("h", 3600), ("m", 60), ("s", 1)]
 
+type TimeUnit = tuple[str, int]
+
 
 def time_to_str(value: int) -> str:
     if value < 0:
@@ -12,7 +14,7 @@ def time_to_str(value: int) -> str:
     return "-"
 
 
-def str_to_time_by_unit(str: str, unit: tuple[str, int]) -> int:
+def str_to_time_by_unit(str: str, unit: TimeUnit) -> int:
     (unit_str, unit_value) = unit
 
     # verify value min size
@@ -45,4 +47,5 @@ def str_to_time(str: str) -> int:
         for unit in TIME_UNITS:
             if str[-1] == unit[0]:
                 return str_to_time_by_unit(str, unit)
+
     return -1
