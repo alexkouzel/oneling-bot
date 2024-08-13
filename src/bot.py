@@ -11,7 +11,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from models import Reminder, Chat, Dictionary
+from models import Reminder, Chat, Dictionary, Lemma, Translation
 from utils import time_to_str, str_to_time
 
 from linguee.api import translations
@@ -72,6 +72,10 @@ def get_chat(update: Update) -> Chat:
     return repository.get_chat(update.effective_chat.id)
 
 
+def to_2d(values: list) -> list[list]:
+    return [values[i : i + 2] for i in range(0, len(values), 2)]
+
+
 # ----------------------------------------------------------------
 #  @default
 # ----------------------------------------------------------------
@@ -80,13 +84,13 @@ def get_chat(update: Update) -> Chat:
 def get_help_message(chat: Chat):
     return f"""
 
-I can help you to remember words and phrases in different languages with scheduled reminders.
+I can help you to remember words in different languages with scheduled reminders.
 
 <b>🔔  To manage reminders:</b>
 /show_reminders - show all reminders
 /clear_reminders - clear all reminders
 
-To set a new reminder, just type the word or phrase you want to remember.
+To set a new reminder, just type the word you want to remember.
 
 <b>⏰  To manage intervals:</b>
 /show_intervals - show current intervals
@@ -98,6 +102,7 @@ Note: If you change intervals, all existing reminders will be cleared because th
 <b>🌐  To manage your dictionary:</b>
 /show_dictionary - show current dictionary
 /choose_dictionary - choose new dictionary
+/switch_dictionary - switch source and destination languages
 
 <b>⚙️  Current settings:</b>
 Intervals: {str_intervals(chat.reminder_intervals)}
@@ -123,6 +128,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ----------------------------------------------------------------
 
 
+async def switch_dictionary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = get_chat(update)
+
+    dictionary = Dictionary(chat.dictionary.dst, chat.dictionary.src)
+
+    repository.update_dictionary(chat.id, dictionary)
+
+    await update.message.reply_text(
+        f'Dictionary is set to "{str_dictionary(dictionary)}"'
+    )
+
+
 async def show_dictionary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = get_chat(update)
 
@@ -131,7 +148,7 @@ async def show_dictionary_command(update: Update, context: ContextTypes.DEFAULT_
 
 async def choose_dictionary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dictionaries = [
-        Dictionary(PRIMARY_LANGUAGE, language)
+        Dictionary(language, PRIMARY_LANGUAGE)
         for language in LANGUAGES
         if language != PRIMARY_LANGUAGE
     ]
@@ -144,9 +161,7 @@ async def choose_dictionary_command(update: Update, context: ContextTypes.DEFAUL
         for dictionary in dictionaries
     ]
 
-    keyboard = InlineKeyboardMarkup(
-        [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
-    )
+    keyboard = InlineKeyboardMarkup(to_2d(buttons))
 
     await update.message.reply_text(
         "Please choose the dictionary you want to use:",
@@ -251,11 +266,21 @@ async def show_reminders_command(update: Update, context: ContextTypes.DEFAULT_T
         return await update.message.reply_text("You have no reminders")
 
     reminders = [
-        f"{reminder.src} - {reminder.dst}" for reminder in chat.reminders.values()
+        f"{reminder.text} - {str_reminder_translations(reminder, TRANSLATIONS_PER_REMINDER)}"
+        for reminder in chat.reminders.values()
     ]
     reminders = "\n".join(reminders)
 
-    await update.message.reply_text(reminders)
+    await update.message.reply_text(reminders, parse_mode="HTML")
+
+
+def str_reminder_translations(reminder: Reminder, limit: int | None = None) -> str:
+    translations = reminder.get_translations()
+
+    if limit != None and len(translations) > limit:
+        return " / ".join(translations[:limit]) + " / ..."
+    else:
+        return " / ".join(translations)
 
 
 async def clear_reminders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -269,26 +294,6 @@ async def clear_reminders_command(update: Update, context: ContextTypes.DEFAULT_
 # ----------------------------------------------------------------
 #  @reminder_creation
 # ----------------------------------------------------------------
-
-
-async def create_reminder(update: Update, chat: Chat, value: str):
-    lemmas = await translations(value, chat.dictionary.src, chat.dictionary.dst)
-
-    if not lemmas:
-        await update.message.reply_text(f'The value "{value}" is not found. Try again')
-        return None
-
-    idx = chat.reminder_next_id
-
-    last_at = time.time()
-    left = len(chat.reminder_intervals)
-
-    src = lemmas_src(lemmas)
-    dst = lemmas_dst(lemmas)
-
-    examples = lemmas_examples(lemmas)
-
-    return Reminder(idx, last_at, left, src, dst, examples)
 
 
 async def create_reminder_command(
@@ -306,30 +311,48 @@ async def create_reminder_command(
     await send_reminder(context, chat, reminder)
 
 
-def lemmas_src(lemmas):
-    return lemmas[0].text
+async def create_reminder(update: Update, chat: Chat, value: str):
+    lemmas = await translations(value, chat.dictionary.src, chat.dictionary.dst)
+
+    if not lemmas:
+        await update.message.reply_text(f'The value "{value}" is not found. Try again')
+        return None
+
+    idx = chat.reminder_next_id
+
+    last_at = time.time()
+    left = len(chat.reminder_intervals)
+
+    text = lemmas[0].text
+    lemmas = format_lemmas(lemmas)
+
+    return Reminder(idx, last_at, left, text, lemmas, chat.dictionary)
 
 
-def lemmas_dst(lemmas):
-    translations = set()
-
-    for lemma in lemmas:
-        for translation in lemma.translations:
-            translations.add(translation.text)
-
-    translations = list(translations)[:TRANSLATIONS_PER_REMINDER]
-
-    return " / ".join(translations)
+def format_lemmas(lemmas):
+    return [format_lemma(lemma) for lemma in lemmas]
 
 
-def lemmas_examples(lemmas):
-    examples = [
-        (example.src, example.dst)
-        for lemma in lemmas
-        for translation in lemma.translations
-        for example in translation.examples
-    ]
-    return examples[:EXAMPLES_PER_REMINDER]
+def format_lemma(lemma):
+    pos = lemma.pos
+    translations = format_translations(lemma.translations)
+
+    return Lemma(pos, translations)
+
+
+def format_translations(translations):
+    return [format_translation(translation) for translation in translations]
+
+
+def format_translation(translation):
+    text = translation.text
+    examples = format_examples(translation.examples)
+
+    return Translation(text, examples)
+
+
+def format_examples(examples):
+    return [(example.src, example.dst) for example in examples]
 
 
 # ----------------------------------------------------------------
@@ -343,13 +366,16 @@ async def send_reminder(
     text = str_reminder(chat, reminder)
     keyboard = reminder_keyboard(reminder)
 
-    await context.bot.send_message(chat_id=chat.id, text=text, reply_markup=keyboard)
+    await context.bot.send_message(
+        chat_id=chat.id, text=text, reply_markup=keyboard, parse_mode="HTML"
+    )
 
 
 def str_reminder(chat: Chat, reminder: Reminder) -> str:
     left = str_reminder_left(chat, reminder)
+    translations = str_reminder_translations(reminder, TRANSLATIONS_PER_REMINDER)
 
-    return f"{reminder.src} - {reminder.dst}\n\n{left}"
+    return f"<b>{reminder.text}</b> - {translations}\n\n{left}"
 
 
 def str_reminder_left(chat: Chat, reminder: Reminder) -> str:
@@ -367,17 +393,27 @@ def reminder_keyboard(reminder: Reminder) -> InlineKeyboardMarkup:
     if reminder.left == 0:
         return None
 
-    stop_btn = InlineKeyboardButton("Stop", callback_data=f"stop|{reminder.id}")
+    buttons = []
 
-    buttons = [stop_btn]
+    # translations button
+    if len(reminder.get_translations()) > TRANSLATIONS_PER_REMINDER:
+        translations_btn = InlineKeyboardButton(
+            "Translations", callback_data=f"translations|{reminder.id}"
+        )
+        buttons.append(translations_btn)
 
-    if reminder.examples:
+    # examples button
+    if reminder.has_examples():
         examples_btn = InlineKeyboardButton(
             "Examples", callback_data=f"examples|{reminder.id}"
         )
         buttons.append(examples_btn)
 
-    return InlineKeyboardMarkup([buttons])
+    # stop button
+    stop_btn = InlineKeyboardButton("Stop Reminder", callback_data=f"stop|{reminder.id}")
+    buttons.append(stop_btn)
+
+    return InlineKeyboardMarkup(to_2d(buttons))
 
 
 async def reminder_callback(
@@ -395,14 +431,14 @@ async def reminder_callback(
 
     message = response_message(reminder)
 
-    await context.bot.send_message(chat_id, message)
+    await context.bot.send_message(chat_id, message, parse_mode="HTML")
 
 
 async def stop_callback(args: CallbackArgs):
     await reminder_callback(
         args,
         repository.remove_reminder,
-        lambda reminder: f'Reminder "{reminder.src}" is stopped',
+        lambda reminder: f'Reminder "{reminder.text}" is stopped',
     )
 
 
@@ -412,10 +448,18 @@ async def examples_callback(args: CallbackArgs):
         repository.get_reminder,
         lambda reminder: "\n".join(
             [
-                f"{idx + 1}. {dst} - {src}\n"
-                for idx, (src, dst) in enumerate(reminder.examples)
+                f"<b>{idx + 1}. {src}</b>\nTranslation: {dst}\n"
+                for idx, (src, dst) in enumerate(reminder.get_examples()[:EXAMPLES_PER_REMINDER])
             ]
         ),
+    )
+
+
+async def translations_callback(args: CallbackArgs):
+    await reminder_callback(
+        args,
+        repository.get_reminder,
+        lambda reminder: str_reminder_translations(reminder),
     )
 
 
@@ -465,6 +509,8 @@ async def keyboard_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await dictionary_callback(args)
         case "examples":
             await examples_callback(args)
+        case "translations":
+            await translations_callback(args)
         case _:
             return
 
@@ -521,6 +567,7 @@ def run_polling(token: str):
     # handle dictionary commands
     app.add_handler(CommandHandler("show_dictionary", show_dictionary_command))
     app.add_handler(CommandHandler("choose_dictionary", choose_dictionary_command))
+    app.add_handler(CommandHandler("switch_dictionary", switch_dictionary_command))
 
     # handle invalid commands
     app.add_handler(MessageHandler(filters.COMMAND, invalid_command_handler))

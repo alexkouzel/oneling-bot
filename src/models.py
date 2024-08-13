@@ -8,16 +8,46 @@ class Dictionary:
 
 
 @dataclass
+class Translation:
+    text: str
+    examples: list[tuple[str, str]]
+
+
+@dataclass
+class Lemma:
+    pos: str
+    translations: list[Translation]
+
+
+@dataclass
 class Reminder:
     id: int
 
     last_at: int
     left: int
 
-    src: str
-    dst: str
+    text: str
+    lemmas: list[Lemma]
 
-    examples: list[tuple[str, str]]
+    dictionary: Dictionary
+
+    def get_translations(self) -> list[str]:
+        return [
+            translation.text
+            for lemma in self.lemmas
+            for translation in lemma.translations
+        ]
+
+    def get_examples(self) -> list[tuple[str, str]]:
+        return [
+            example
+            for lemma in self.lemmas
+            for translation in lemma.translations
+            for example in translation.examples
+        ]
+
+    def has_examples(self) -> bool:
+        return any(self.get_examples())
 
 
 @dataclass

@@ -4,7 +4,7 @@ from models import Reminder, Chat, Dictionary
 
 DEFAULT_REMINDER_INTERVALS = [h * 60 for h in [5, 30, 120, 720, 2880]]
 
-DEFAULT_DICTIONARY = Dictionary("en", "nl")
+DEFAULT_DICTIONARY = Dictionary("nl", "en")
 
 
 class Repository:
@@ -25,7 +25,7 @@ class Repository:
         chat.reminders = {
             k: v
             for k, v in chat.reminders.items()
-            if not (v.src == reminder.src and v.dst == reminder.dst)
+            if not (v.text == reminder.text and v.dictionary == reminder.dictionary)
         }
 
         chat.reminders[reminder.id] = reminder
