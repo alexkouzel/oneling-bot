@@ -1,57 +1,85 @@
 import time
 
-from models import Entry, Chat, Dictionary
+from models import Reminder, Chat, Dictionary
+
+DEFAULT_REMINDER_INTERVALS = [h * 60 for h in [5, 30, 120, 720, 2880]]
+
+DEFAULT_DICTIONARY = Dictionary("en", "nl")
 
 
 class Repository:
     def __init__(self):
         self.chats: dict[int, Chat] = {}
 
-    def get_all_chats(self):
-        return self.chats
+    # ----------------------------------------------------------------
+    #  @reminders
+    # ----------------------------------------------------------------
 
-    def handle_entry_reminder(self, entry: Entry):
-        chat = self.chats[entry.chat_id]
-        entry.reminders_left -= 1
+    def get_reminder(self, chat_id: int, reminder_id: int) -> Reminder:
+        return self.get_chat(chat_id).reminders.get(reminder_id)
 
-        if entry.reminders_left == 0:
-            chat.entries.pop(entry.idx)
+    def save_reminder(self, chat_id: int, reminder: Reminder) -> None:
+        chat = self.get_chat(chat_id)
+
+        # remove reminder with the same src and dst
+        chat.reminders = {
+            k: v
+            for k, v in chat.reminders.items()
+            if not (v.src == reminder.src and v.dst == reminder.dst)
+        }
+
+        chat.reminders[reminder.id] = reminder
+        chat.reminder_next_id += 1
+
+    def remove_reminder(self, chat_id: int, reminder_id: int) -> Reminder:
+        chat = self.get_chat(chat_id)
+
+        return chat.reminders.pop(reminder_id, None)
+
+    def clear_reminders(self, chat_id: int) -> None:
+        self.get_chat(chat_id).reminders.clear()
+
+    def handle_reminder_call(self, chat_id: int, reminder_id: int) -> None:
+        chat = self.get_chat(chat_id)
+        reminder = chat.reminders[reminder_id]
+
+        reminder.left -= 1
+
+        if reminder.left == 0:
+            chat.reminders.pop(reminder.id)
         else:
-            entry.last_reminded_at = time.time()
+            reminder.last_at = time.time()
 
-    def add_entry(self, chat_id: int, entry: Entry):
-        chat = self.chats[chat_id]
+    # ----------------------------------------------------------------
+    #  @chats
+    # ----------------------------------------------------------------
 
-        # remove previous entry with the same src (if exists)
-        chat.entries = {idx: e for idx, e in chat.entries.items() if e.src != entry.src}
+    def get_chat(self, id: int) -> Chat:
 
-        chat.entries[entry.idx] = entry
-        chat.next_idx += 1
-
-    def remove_entry(self, chat_id: int, idx: int):
-        chat = self.chats[chat_id]
-
-        if idx in chat.entries:
-            chat.entries.pop(idx)
-            return True
-
-        return False
-
-    def clear_entries(self, chat_id: int):
-        self.chats[chat_id].entries.clear()
-
-    def update_intervals(self, chat_id: int, intervals: list[int]):
-        self.get_chat(chat_id).intervals = intervals
-
-    def update_dictionary(self, chat_id: int, dictionary: Dictionary):
-        self.get_chat(chat_id).dictionary = dictionary
-
-    def get_chat(self, id: int):
         if id not in self.chats:
-
-            default_intervals = [h * 60 for h in [5, 30, 120, 720, 2880]]
-            default_dictionary = Dictionary("en", "nl")
-
-            self.chats[id] = Chat(id, 0, {}, default_intervals, default_dictionary)
+            return self.create_chat(id, DEFAULT_REMINDER_INTERVALS, DEFAULT_DICTIONARY)
 
         return self.chats[id]
+
+    def get_all_chats(self) -> list[Chat]:
+        return self.chats.values()
+
+    def create_chat(
+        self, id: int, reminder_intervals: list[int], dictionary: Dictionary
+    ) -> Chat:
+        chat = Chat(id, {}, reminder_intervals, 0, dictionary)
+        self.chats[id] = chat
+
+        return chat
+
+    def update_reminder_intervals(
+        self, chat_id: int, reminder_intervals: list[int]
+    ) -> None:
+
+        self.get_chat(chat_id).reminder_intervals = reminder_intervals
+
+        # clear entries as they use old intervals
+        self.clear_reminders(chat_id)
+
+    def update_dictionary(self, chat_id: int, dictionary: Dictionary) -> None:
+        self.get_chat(chat_id).dictionary = dictionary

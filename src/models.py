@@ -2,29 +2,33 @@ from dataclasses import dataclass
 
 
 @dataclass
-class Entry:
-    idx: int
-    chat_id: int
-    last_reminded_at: int
-    reminders_left: int
-    src: str
-    dst: str
-    examples: list[str]
-
-
-@dataclass
 class Dictionary:
     src: str
     dst: str
 
 
 @dataclass
+class Reminder:
+    id: int
+
+    last_at: int
+    left: int
+
+    src: str
+    dst: str
+
+    examples: list[tuple[str, str]]
+
+
+@dataclass
 class Chat:
     id: int
-    next_idx: int
-    entries: dict[str, Entry]
-    intervals: list[int]
+
+    reminders: dict[int, Reminder]
+    reminder_intervals: list[int]
+    reminder_next_id: int
+
     dictionary: Dictionary
 
-    def get_interval(self, entry: Entry):
-        return self.intervals[-entry.reminders_left]
+    def get_reminder_interval(self, reminder: Reminder) -> int:
+        return self.reminder_intervals[-reminder.left]

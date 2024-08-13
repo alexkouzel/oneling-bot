@@ -11,45 +11,40 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from models import Entry, Chat, Dictionary
-from utils import time_to_text, text_to_time
+from models import Reminder, Chat, Dictionary
+from utils import time_to_str, str_to_time
 
 from linguee.api import translations
 
+type CallbackArgs = tuple[Update, ContextTypes.DEFAULT_TYPE, list[str]]
+
 # ----------------------------------------------------------------
-#  Languages
+#  @constants
 # ----------------------------------------------------------------
 
+DEFAULT_REMINDER_INTERVALS = [h * 60 for h in [5, 30, 120, 720, 2880]]
+
+TRANSLATIONS_PER_REMINDER = 3
+EXAMPLES_PER_REMINDER = 5
+
+PRIMARY_LANGUAGE = "en"
+
 LANGUAGES = {
-    "bg": "Bulgarian",
-    "cs": "Czech",
-    "da": "Danish",
-    "de": "German",
-    "el": "Greek",
     "en": "English",
+    "de": "German",
     "es": "Spanish",
-    "et": "Estonian",
-    "fi": "Finnish",
     "fr": "French",
-    "hu": "Hungarian",
     "it": "Italian",
     "ja": "Japanese",
-    "lt": "Lithuanian",
-    "lv": "Latvian",
-    "mt": "Maltese",
     "nl": "Dutch",
     "pl": "Polish",
     "pt": "Portuguese",
-    "ro": "Romanian",
     "ru": "Russian",
-    "sk": "Slovak",
-    "sl": "Slovene",
-    "sv": "Swedish",
     "zh": "Chinese",
 }
 
 # ----------------------------------------------------------------
-#  Repository
+#  @repository
 # ----------------------------------------------------------------
 # The repository is used to store user chats & entries.
 
@@ -58,7 +53,7 @@ from repository import Repository
 repository = Repository()
 
 # ----------------------------------------------------------------
-#  Logging
+#  @logging
 # ----------------------------------------------------------------
 
 import logging
@@ -69,7 +64,7 @@ logging.basicConfig(
 )
 
 # ----------------------------------------------------------------
-#  Utils
+#  @utils
 # ----------------------------------------------------------------
 
 
@@ -78,70 +73,113 @@ def get_chat(update: Update) -> Chat:
 
 
 # ----------------------------------------------------------------
-#  Help
+#  @default
 # ----------------------------------------------------------------
 
 
 def get_help_message(chat: Chat):
     return f"""
 
-You can control me by sending these commands:
+I can help you to remember words and phrases in different languages by sending you reminders at specified intervals.
 
-/list - list reminders
-/clear - clear reminders
-/set_intervals {{intervals}} - set intervals
-/show_intervals - show intervals
+<b>🔔  To manage reminders:</b>
+/show_reminders - show all reminders
+/clear_reminders - clear all reminders
 
-Also, to add a new reminder, simply type the value in the chat.
+To set a new reminder, just type the word or phrase you want to remember.
 
-Current intervals: {get_intervals_text(chat.intervals)}
-Current dictionary: {get_dictionary_text(chat.dictionary)}
+<b>⏰  To manage intervals:</b>
+/show_intervals - show current intervals
+/set_intervals - set new intervals
+/reset_intervals - reset intervals to default values
+
+Note: If you change intervals, all existing reminders will be cleared because they use the old intervals.
+
+<b>🌐  To manage your dictionary:</b>
+/show_dictionary - show current dictionary
+/choose_dictionary - choose new dictionary
+
+<b>⚙️  Current settings:</b>
+Intervals: {str_intervals(chat.reminder_intervals)}
+Dictionary: {str_dictionary(chat.dictionary)}
 
 """
 
 
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = get_chat(update)
+
+    await update.message.reply_text(get_help_message(chat), parse_mode="HTML")
+
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = get_chat(update)
-    message = get_help_message(chat)
 
-    await update.message.reply_text(message, parse_mode="HTML")
+    await update.message.reply_text(get_help_message(chat), parse_mode="HTML")
 
 
 # ----------------------------------------------------------------
-#  Dictionary
+#  @dictionary
 # ----------------------------------------------------------------
 
 
-async def switch_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_dictionary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = get_chat(update)
 
-    new_dictionary = Dictionary(chat.dictionary.dst, chat.dictionary.src)
-
-    repository.update_dictionary(chat.id, new_dictionary)
-
-    message = "Success! The new dictionary: " + get_dictionary_text(new_dictionary)
-    await update.message.reply_text(message)
+    await update.message.reply_text(str_dictionary(chat.dictionary))
 
 
-async def set_dictionary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # TODO: Implement this.
-    return
+async def choose_dictionary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    dictionaries = [
+        Dictionary(PRIMARY_LANGUAGE, language)
+        for language in LANGUAGES
+        if language != PRIMARY_LANGUAGE
+    ]
+
+    buttons = [
+        InlineKeyboardButton(
+            f"{str_dictionary(dictionary)}",
+            callback_data=f"dictionary|{dictionary.src}|{dictionary.dst}",
+        )
+        for dictionary in dictionaries
+    ]
+
+    keyboard = InlineKeyboardMarkup(
+        [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    )
+
+    await update.message.reply_text(
+        "Please choose the dictionary you want to use:",
+        reply_markup=keyboard,
+    )
 
 
-async def choose_dictionary():
-    # TODO: Implement this.
-    return
+async def dictionary_callback(args: CallbackArgs):
+    (update, context, data) = args
+
+    chat_id = update.effective_chat.id
+
+    src = data[1]
+    dst = data[2]
+
+    dictionary = Dictionary(src, dst)
+
+    repository.update_dictionary(chat_id, dictionary)
+
+    await context.bot.send_message(
+        chat_id, f'Dictionary is set to "{str_dictionary(dictionary)}"'
+    )
 
 
-def get_dictionary_text(dictionary: Dictionary):
+def str_dictionary(dictionary: Dictionary) -> str:
     src = LANGUAGES[dictionary.src]
     dst = LANGUAGES[dictionary.dst]
 
-    return f"{src} -> {dst}"
+    return f"{src} → {dst}"
 
 
 # ----------------------------------------------------------------
-#  Reminder Intervals
+#  @intervals
 # ----------------------------------------------------------------
 
 set_intervals_usage = """
@@ -155,8 +193,15 @@ Time units: s (seconds), m (minutes), h (hours), d (days)
 """
 
 
+async def show_intervals_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    intervals = get_chat(update).reminder_intervals
+    message = "Current intervals: " + str_intervals(intervals)
+
+    await update.message.reply_text(message)
+
+
 async def set_intervals_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    intervals = [text_to_time(arg) for arg in context.args]
+    intervals = [str_to_time(arg) for arg in context.args]
 
     if len(intervals) == 0:
         return await update.message.reply_text(set_intervals_usage)
@@ -170,217 +215,238 @@ async def set_intervals_command(update: Update, context: ContextTypes.DEFAULT_TY
 
     chat_id = update.effective_chat.id
 
-    # update intervals in the repository
-    repository.update_intervals(chat_id, intervals)
-
-    # clear entries as they use old intervals
-    repository.clear_entries(chat_id)
+    repository.update_reminder_intervals(chat_id, intervals)
 
     await update.message.reply_text(
-        "Success! Intervals are updated and all previous entries were cleared"
+        "Success! Intervals are updated to: " + str_intervals(intervals)
     )
 
 
-async def show_intervals_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    intervals = get_chat(update).intervals
-    message = "Intervals: " + get_intervals_text(intervals)
+async def reset_intervals_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
 
-    await update.message.reply_text(message)
+    repository.update_reminder_intervals(chat_id, DEFAULT_REMINDER_INTERVALS)
+
+    await update.message.reply_text(
+        "Intervals are reset to default values: 5m 30m 2h 12h 2d"
+    )
 
 
-def get_intervals_text(intervals: list[int]):
-    result = [time_to_text(interval) for interval in intervals]
+def str_intervals(intervals: list[int]):
+    result = [time_to_str(interval) for interval in intervals]
     result = " ".join(result)
 
     return result
 
 
 # ----------------------------------------------------------------
-#  Reminder Management (listing, cleaning, etc.)
+#  @reminder_management
 # ----------------------------------------------------------------
 
 
-async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_reminders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = get_chat(update)
 
-    if not chat.entries:
-        return await update.message.reply_text("Your list is empty")
+    if not chat.reminders:
+        return await update.message.reply_text("You have no reminders")
 
-    entry_list = [f"{entry.src} - {entry.dst}" for entry in chat.entries.values()]
-    entry_list = "\n".join(entry_list)
+    reminders = [
+        f"{reminder.src} - {reminder.dst}" for reminder in chat.reminders.values()
+    ]
+    reminders = "\n".join(reminders)
 
-    await update.message.reply_text(entry_list)
+    await update.message.reply_text(reminders)
 
 
-async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def clear_reminders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
-    repository.clear_entries(chat_id)
+    repository.clear_reminders(chat_id)
 
-    await update.message.reply_text("Your list is now empty")
+    await update.message.reply_text("You no longer have any reminders")
 
 
 # ----------------------------------------------------------------
-#  Reminder Creation
+#  @reminder_creation
 # ----------------------------------------------------------------
 
 
-async def create_entry(chat: Chat, value: str):
+async def create_reminder(update: Update, chat: Chat, value: str):
     lemmas = await translations(value, chat.dictionary.src, chat.dictionary.dst)
 
     if not lemmas:
+        await update.message.reply_text(f'The value "{value}" is not found. Try again')
         return None
 
-    idx = chat.next_idx
+    idx = chat.reminder_next_id
 
-    last_reminded_at = time.time()
-    reminders_left = len(chat.intervals)
+    last_at = time.time()
+    left = len(chat.reminder_intervals)
 
-    src = get_entry_src(lemmas)
-    dst = get_entry_dst(lemmas)
-    examples = get_entry_examples(lemmas)
+    src = lemmas_src(lemmas)
+    dst = lemmas_dst(lemmas)
 
-    return Entry(idx, chat.id, last_reminded_at, reminders_left, src, dst, examples)
+    examples = lemmas_examples(lemmas)
+
+    return Reminder(idx, last_at, left, src, dst, examples)
 
 
-async def create_reminder(
-    value: str, update: Update, context: ContextTypes.DEFAULT_TYPE
+async def create_reminder_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, value: str
 ):
     chat = get_chat(update)
 
-    entry = await create_entry(chat, value)
+    reminder = await create_reminder(update, chat, value)
 
-    if not entry:
-        return await update.message.reply_text("The value is not found. Try again")
-    
-    repository.add_entry(chat.id, entry)
+    if not reminder:
+        return None
 
-    await send_reminder(chat, entry, context)
+    repository.save_reminder(chat.id, reminder)
+
+    await send_reminder(context, chat, reminder)
 
 
-def get_entry_src(lemmas):
+def lemmas_src(lemmas):
     return lemmas[0].text
 
 
-def get_entry_dst(lemmas):
+def lemmas_dst(lemmas):
     translations = set()
 
     for lemma in lemmas:
         for translation in lemma.translations:
             translations.add(translation.text)
 
-    translations = list(translations)[:3]
+    translations = list(translations)[:TRANSLATIONS_PER_REMINDER]
 
     return " / ".join(translations)
 
 
-def get_entry_examples(lemmas):
-    translation_examples = [
-        example.dst
+def lemmas_examples(lemmas):
+    examples = [
+        (example.src, example.dst)
         for lemma in lemmas
         for translation in lemma.translations
         for example in translation.examples
     ]
-    return translation_examples[:2]
+    return examples[:EXAMPLES_PER_REMINDER]
 
 
 # ----------------------------------------------------------------
-#  Reminder Sending
+#  @reminder_sending
 # ----------------------------------------------------------------
 
 
-async def send_reminder(chat: Chat, entry: Entry, context: ContextTypes.DEFAULT_TYPE):
-    text = get_reminder_text(chat, entry)
-    keyboard = get_reminder_keyboard(entry)
+async def send_reminder(
+    context: ContextTypes.DEFAULT_TYPE, chat: Chat, reminder: Reminder
+):
+    text = str_reminder(chat, reminder)
+    keyboard = reminder_keyboard(reminder)
 
-    await context.bot.send_message(
-        chat_id=chat.id,
-        text=text,
-        reply_markup=keyboard,
-    )
+    await context.bot.send_message(chat_id=chat.id, text=text, reply_markup=keyboard)
 
 
-def get_reminder_text(chat: Chat, entry: Entry) -> str:
-    examples = get_reminder_text_examples(entry)
-    left = get_reminder_text_left(chat, entry)
+def str_reminder(chat: Chat, reminder: Reminder) -> str:
+    left = str_reminder_left(chat, reminder)
 
-    return f"{entry.src} - {entry.dst}\n{examples}\n{left}"
-
-
-def get_reminder_text_examples(entry: Entry) -> str:
-    if not entry.examples:
-        return ""
-
-    result = ["- " + example for example in entry.examples]
-    result = "\n" + "\n".join(result) + "\n"
-
-    return result
+    return f"{reminder.src} - {reminder.dst}\n\n{left}"
 
 
-def get_reminder_text_left(chat: Chat, entry: Entry) -> str:
-    if entry.reminders_left == 0:
+def str_reminder_left(chat: Chat, reminder: Reminder) -> str:
+    if reminder.left == 0:
         return "** last reminder **"
 
-    next_reminder = time_to_text(chat.get_interval(entry))
+    next_reminder = time_to_str(chat.get_reminder_interval(reminder))
 
-    return "Next reminder in: {}\nReminders left: {}".format(
-        next_reminder, entry.reminders_left
+    return "Next reminder in: {}\nReminders left: {} / {}".format(
+        next_reminder, reminder.left, len(chat.reminder_intervals)
     )
 
 
-def get_reminder_keyboard(entry: Entry) -> InlineKeyboardMarkup:
-    if entry.reminders_left == 0:
+def reminder_keyboard(reminder: Reminder) -> InlineKeyboardMarkup:
+    if reminder.left == 0:
         return None
 
-    stop_btn = InlineKeyboardButton("Stop", callback_data=f"stop|{entry.idx}")
+    stop_btn = InlineKeyboardButton("Stop", callback_data=f"stop|{reminder.id}")
 
-    return InlineKeyboardMarkup([[stop_btn]])
+    buttons = [stop_btn]
+
+    if reminder.examples:
+        examples_btn = InlineKeyboardButton(
+            "Examples", callback_data=f"examples|{reminder.id}"
+        )
+        buttons.append(examples_btn)
+
+    return InlineKeyboardMarkup([buttons])
 
 
-async def stop_callback(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, args: list[str]
+async def reminder_callback(
+    args: CallbackArgs, reminder_action: callable, response_message: callable
 ):
+    (update, context, data) = args
+
     chat_id = update.effective_chat.id
-    entry_idx = int(args[1])
+    reminder_id = int(data[1])
 
-    is_reminder_removed = repository.remove_entry(chat_id, entry_idx)
+    reminder = reminder_action(chat_id, reminder_id)
 
-    response = (
-        "Reminder is stopped"
-        if is_reminder_removed
-        else "Reminder is no longer in your list"
+    if not reminder:
+        return await context.bot.send_message(chat_id, "Reminder is not found")
+
+    message = response_message(reminder)
+
+    await context.bot.send_message(chat_id, message)
+
+
+async def stop_callback(args: CallbackArgs):
+    await reminder_callback(
+        args,
+        repository.remove_reminder,
+        lambda reminder: f'Reminder "{reminder.src}" is stopped',
     )
 
-    await context.bot.send_message(chat_id=chat_id, text=response)
+
+async def examples_callback(args: CallbackArgs):
+    await reminder_callback(
+        args,
+        repository.get_reminder,
+        lambda reminder: "\n".join(
+            [
+                f"{idx + 1}. {dst} - {src}\n"
+                for idx, (src, dst) in enumerate(reminder.examples)
+            ]
+        ),
+    )
 
 
 # ----------------------------------------------------------------
-#  Reminder Caller
+#  @reminder_caller
 # ----------------------------------------------------------------
 
 
 async def call_reminder(context: ContextTypes.DEFAULT_TYPE):
     now = time.time()
 
-    for chat in repository.get_all_chats().values():
-        for entry in list(chat.entries.values()):
+    for chat in repository.get_all_chats():
+        for reminder in chat.reminders.values():
 
-            time_to_remind = (now - entry.last_reminded_at) > chat.get_interval(entry)
+            interval = chat.get_reminder_interval(reminder)
+            time_to_remind = (now - reminder.last_at) > interval
 
             if time_to_remind:
-                repository.handle_entry_reminder(entry)
-                await send_reminder(chat, entry, context)
+                repository.handle_reminder_call(chat.id, reminder.id)
+                await send_reminder(context, chat, reminder)
 
 
 # ----------------------------------------------------------------
-#  Common Bot Handlers
+#  @common_handlers
 # ----------------------------------------------------------------
 
 
 async def non_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     value = update.message.text
 
-    await create_reminder(value, update, context)
+    await create_reminder_command(update, context, value)
 
 
 async def keyboard_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -388,11 +454,17 @@ async def keyboard_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.answer()
 
-    args = query.data.split("|")
+    data = query.data.split("|")
 
-    match args[0]:
+    args = (update, context, data)
+
+    match data[0]:
         case "stop":
-            await stop_callback(update, context, args)
+            await stop_callback(args)
+        case "dictionary":
+            await dictionary_callback(args)
+        case "examples":
+            await examples_callback(args)
         case _:
             return
 
@@ -405,15 +477,19 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
+async def invalid_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Invalid command. Type /help for more information")
+
+
 # ----------------------------------------------------------------
-#  Bot Runner
+#  @runner
 # ----------------------------------------------------------------
 
 
-def run(token: str):
+def run_polling(token: str):
     app = ApplicationBuilder().token(token).build()
 
-    # run entry reminder every 1 second
+    # call reminders every 1 second
     app.job_queue.run_repeating(call_reminder, interval=1)
 
     # handle errors during bot operation
@@ -422,18 +498,34 @@ def run(token: str):
     # handle callback from keyboards
     app.add_handler(CallbackQueryHandler(keyboard_handler))
 
-    # handle bot commands
-    app.add_handler(CommandHandler(["start", "help"], help_command))
-    app.add_handler(CommandHandler("switch", switch_command))
-    app.add_handler(CommandHandler("list", list_command))
-    app.add_handler(CommandHandler("clear", clear_command))
-    app.add_handler(CommandHandler("set_intervals", set_intervals_command))
-    app.add_handler(CommandHandler("show_intervals", show_intervals_command))
-
     # handle non-command messages
     app.add_handler(
         MessageHandler(filters.TEXT & (~filters.COMMAND), non_command_handler)
     )
+
+    # ----------------------------------------------------------------
+
+    # handle default commands
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("help", help_command))
+
+    # handle reminder commands
+    app.add_handler(CommandHandler("show_reminders", show_reminders_command))
+    app.add_handler(CommandHandler("clear_reminders", clear_reminders_command))
+
+    # handle interval commands
+    app.add_handler(CommandHandler("show_intervals", show_intervals_command))
+    app.add_handler(CommandHandler("set_intervals", set_intervals_command))
+    app.add_handler(CommandHandler("reset_intervals", reset_intervals_command))
+
+    # handle dictionary commands
+    app.add_handler(CommandHandler("show_dictionary", show_dictionary_command))
+    app.add_handler(CommandHandler("choose_dictionary", choose_dictionary_command))
+
+    # handle invalid commands
+    app.add_handler(MessageHandler(filters.COMMAND, invalid_command_handler))
+
+    # ----------------------------------------------------------------
 
     # run the bot using 'polling'
     app.run_polling()
