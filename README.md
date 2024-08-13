@@ -12,7 +12,7 @@ To start using Oneling Bot, simply search for the bot by its username [@onelingb
 - /show_reminders - show all reminders
 - /clear_reminders - clear all reminders
 
-> To set a new reminder, simply type the word or phrase you want to remember directly in the chat.
+> To set a new reminder, simply type the word you want to remember directly in the chat.
 
 ### ⏰ To manage interval:
 - /show_intervals - show current intervals

@@ -91,7 +91,7 @@ I can help you learn and remember words in different languages. By setting up re
 /show_reminders - show all reminders
 /clear_reminders - clear all reminders
 
-To set a new reminder, simply type the word or phrase you want to remember directly in the chat.
+To set a new reminder, simply type the word you want to remember directly in the chat.
 
 <b>⏰ To manage interval:</b>
 /show_intervals - show current intervals
