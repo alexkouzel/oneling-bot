@@ -28,13 +28,13 @@ async def get_query_overview(query: str, src: str, dst: str) -> QueryOverview:
 
 
 def _extract_translations(lemmas) -> list[str]:
-    return [translation.text for lemma in lemmas for translation in lemma.translations]
+    return list({translation.text for lemma in lemmas for translation in lemma.translations})
 
 
 def _extract_examples(lemmas) -> list[Example]:
-    return [
+    return list({
         (example.src, example.dst)
         for lemma in lemmas
         for translation in lemma.translations
         for example in translation.examples
-    ]
+    })
