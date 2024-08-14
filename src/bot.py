@@ -530,6 +530,9 @@ async def keyboard_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if isinstance(context.error, Conflict):
+        return
+    
     logger.error("An error occurred: ", exc_info=context.error)
 
     # notify the developer about the error
