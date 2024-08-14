@@ -1,7 +1,7 @@
 import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.error import Conflict
+from telegram.error import Conflict, NetworkError, InvalidToken
 from telegram.ext import (
     filters,
     MessageHandler,
@@ -22,6 +22,8 @@ type Example = tuple[str, str]
 # ----------------------------------------------------------------
 #  @constants
 # ----------------------------------------------------------------
+
+DEVELOPER_CHAT_ID = 597554184
 
 DEFAULT_REMINDER_INTERVALS = [h * 60 for h in [5, 30, 120, 720, 2880]]
 
@@ -64,6 +66,8 @@ logging.basicConfig(
     level=logging.WARN,
 )
 
+logger = logging.getLogger(__name__)
+
 # ----------------------------------------------------------------
 #  @utils
 # ----------------------------------------------------------------
@@ -80,6 +84,11 @@ def to_2d(values: list) -> list[list]:
 # ----------------------------------------------------------------
 #  @default
 # ----------------------------------------------------------------
+
+
+async def chat_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    await update.message.reply_text(f"Chat ID: {chat_id}")
 
 
 def get_help_message(chat: Chat):
@@ -221,7 +230,7 @@ async def set_intervals_command(update: Update, context: ContextTypes.DEFAULT_TY
 
     if len(intervals) == 0:
         await update.message.reply_text(set_intervals_usage)
-        return None
+        return
 
     are_invalid = any(time == -1 for time in intervals)
 
@@ -266,7 +275,7 @@ async def show_reminders_command(update: Update, context: ContextTypes.DEFAULT_T
 
     if not chat.reminders:
         await update.message.reply_text("You have no reminders")
-        return None
+        return
 
     reminders = [
         f'{idx + 1}. <b>"{reminder.text}"</b> - {str_reminder_translations(reminder, TRANSLATIONS_PER_REMINDER)}'
@@ -307,7 +316,7 @@ async def create_reminder_command(
     reminder = await create_reminder(update, chat, value)
 
     if not reminder:
-        return None
+        return
 
     repository.save_reminder(chat.id, reminder)
 
@@ -404,7 +413,12 @@ async def translations_callback(args: CallbackArgs):
 
 
 async def get_translations_str(text: str, src: str, dst: str) -> str:
-    return str_translations(await get_translations(text, src, dst))
+    translations = await get_translations(text, src, dst)
+
+    if not translations:
+        return "Something went wrong. Try again later"
+
+    return str_translations(translations)
 
 
 def str_translations(translations: list[str]) -> str:
@@ -416,6 +430,11 @@ async def examples_callback(args: CallbackArgs):
 
 
 async def get_examples_str(text: str, src: str, dst: str) -> str:
+    examples = await get_examples(text, src, dst)
+
+    if not examples:
+        return "Something went wrong. Try again later"
+
     return str_examples(await get_examples(text, src, dst))
 
 
@@ -442,7 +461,7 @@ async def reminder_by_id_callback(
 
     if not reminder:
         await context.bot.send_message(chat_id, "Reminder is not found")
-        return None
+        return
 
     message = reminder_message(reminder)
 
@@ -511,11 +530,12 @@ async def keyboard_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        raise context.error
-    except Conflict:
-        # ignore conflicts as they occur during redeploys
-        return
+    logger.error("An error occurred: ", exc_info=context.error)
+
+    # notify the developer about the error
+    await context.bot.send_message(
+        DEVELOPER_CHAT_ID, f"[LOG] An error occurred: {context.error}"
+    )
 
 
 async def invalid_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -547,6 +567,7 @@ def run_polling(token: str):
     # ----------------------------------------------------------------
 
     # handle default commands
+    app.add_handler(CommandHandler("chat_id", chat_id_command))
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
 
