@@ -43,6 +43,10 @@ LANGUAGES = {
     "it": "Italian",
     "nl": "Dutch",
     "ru": "Russian",
+    "uk": "Ukrainian",
+    "el": "Greek",
+    "ar": "Arabic",
+    "ja": "Japanese",
 }
 
 # ----------------------------------------------------------------
@@ -106,13 +110,13 @@ def str_examples(examples: list[Example]) -> str:
 def get_help_message(chat: Chat):
     return f"""
 
-I can help you learn and remember words in different languages. By setting up reminders, it makes it easy to keep new vocabulary in mind.
+I can help you learn and remember words or phrases in different languages. By setting up reminders, it makes it easy to keep new vocabulary in mind.
 
 <b>🔔 To manage reminders:</b>
 /show_reminders - show all reminders
 /clear_reminders - clear all reminders
 
-To set a new reminder, simply type the word you want to remember directly in the chat.
+To set a new reminder, simply type the word or phrase you want to remember directly in the chat.
 
 <b>⏰ To manage intervals:</b>
 /show_intervals - show current intervals
@@ -123,12 +127,12 @@ Note: Changing intervals will automatically clear all existing reminders, as the
 
 <b>🌐 To manage dictionary:</b>
 /show_dictionary - show current dictionary
-/choose_dictionary - choose new dictionary
 /switch_dictionary - switch source and destination languages
+/choose_dictionary - choose new dictionary
 
 <b>⚙️ Current settings:</b>
-Intervals: {str_intervals(chat.reminder_intervals)}
 Dictionary: {str_dictionary(chat.dictionary)}
+Intervals: {str_intervals(chat.reminder_intervals)}
 
 """
 
@@ -186,7 +190,7 @@ async def choose_dictionary_command(update: Update, context: ContextTypes.DEFAUL
     keyboard = InlineKeyboardMarkup(to_2d(buttons))
 
     await update.message.reply_text(
-        "Please choose a dictionary. You can switch languages with /switch_dictionary",
+        "Please choose a dictionary. You can also switch source and destination languages with /switch_dictionary",
         reply_markup=keyboard,
     )
 
@@ -319,7 +323,7 @@ async def create_reminder_command(
     chat = get_chat(update)
 
     # If the reminder already exists, reset it
-    reminder = repository.get_reminder(chat.id, value, chat.dictionary)
+    reminder = repository.get_reminder_by_value(chat.id, value, chat.dictionary)
 
     if reminder:
         reminder.last_at = time.time()
@@ -331,7 +335,7 @@ async def create_reminder_command(
     else:
         reminder = await create_reminder(update, chat, value)
 
-        if not reminder:
+        if not reminder or len(reminder.translation.dst) == 0:
             await update.message.reply_text(
                 f'The value "{value}" is not valid. Try again'
             )
@@ -399,8 +403,14 @@ def str_reminder_left(chat: Chat, reminder: Reminder) -> str:
 def reminder_keyboard(reminder: Reminder) -> InlineKeyboardMarkup:
     buttons = []
 
+    # Definition button
+    if reminder.translation.definition:
+        data = f"definition|{reminder.id}"
+        btn = InlineKeyboardButton("Definition", callback_data=data)
+        buttons.append(btn)
+
     # Examples button
-    if reminder.has_examples:
+    if len(reminder.translation.get_examples()) > 0:
         data = f"examples|{reminder.id}"
         btn = InlineKeyboardButton("Examples", callback_data=data)
         buttons.append(btn)
@@ -414,19 +424,27 @@ def reminder_keyboard(reminder: Reminder) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(to_2d(buttons))
 
 
-async def stop_callback(args: CallbackArgs):
+async def definition_callback(args: CallbackArgs):
     await reminder_callback(
         args,
-        repository.remove_reminder,
-        lambda reminder: f'Reminder "{reminder.translation.src}" is stopped',
+        repository.get_reminder_by_id,
+        lambda reminder: reminder.translation.definition,
     )
 
 
 async def examples_callback(args: CallbackArgs):
     await reminder_callback(
         args,
-        repository.get_reminder,
+        repository.get_reminder_by_id,
         lambda reminder: str_examples(reminder.translation.get_examples()),
+    )
+
+
+async def stop_callback(args: CallbackArgs):
+    await reminder_callback(
+        args,
+        repository.remove_reminder,
+        lambda reminder: f'Reminder "{reminder.translation.src}" is stopped',
     )
 
 
@@ -500,6 +518,8 @@ async def keyboard_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await stop_callback(args)
         case "dictionary":
             await dictionary_callback(args)
+        case "definition":
+            await definition_callback(args)
         case "examples":
             await examples_callback(args)
         case _:
@@ -568,8 +588,8 @@ def run_polling(token: str):
 
     # Handle dictionary commands
     app.add_handler(CommandHandler("show_dictionary", show_dictionary_command))
-    app.add_handler(CommandHandler("choose_dictionary", choose_dictionary_command))
     app.add_handler(CommandHandler("switch_dictionary", switch_dictionary_command))
+    app.add_handler(CommandHandler("choose_dictionary", choose_dictionary_command))
 
     # Handle invalid commands
     app.add_handler(MessageHandler(filters.COMMAND, invalid_command_handler))

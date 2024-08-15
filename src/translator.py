@@ -7,13 +7,14 @@ from models import Translation, Destination, Example
 client = OpenAI()
 
 JSON_SCHEMA = {
-    "src": "string",
-    "dst": [
+    "corrected_term": "string",
+    "translations": [
         {
             "value": "string",
             "examples": [{"src": "string", "dst": "string"}],
         }
     ],
+    "definition": "string",
 }
 
 
@@ -24,19 +25,24 @@ def translate(
     translation_count: int,
     examples_per_translation_count: int,
 ) -> Translation:
-
+    
     json_schema_str = json.dumps(JSON_SCHEMA)
 
     system_message = (
         "Given a term, source and destination languages, "
-        "correct the term from typos and provide it as 'src'. "
-        f"Translate it using up to {translation_count} translations, "
-        f"with {examples_per_translation_count} examples for each. "
-        "If the term is not valid or recognized, return an empty JSON object. "
-        f"Return in JSON format: {{{json_schema_str}}}"
+        "correct all errors, including typos, grammatical errors, incorrect collocations, improper word choices, and non-idiomatic expressions. "
+        "For example, if the input is 'ik ben hunger', correct it to 'ik heb honger'. "
+        f"Translate the corrected term or phrase using up to {translation_count} unique and non-redundant translations. "
+        "Each translation must be distinct in wording, phrasing, or style, and must not simply be a rewording or synonym substitution of the same translation. "
+        f"For each translation, provide {examples_per_translation_count} unique and non-redundant examples. "
+        "Each example must be provided in both the source language (marked as 'src') and the destination language (marked as 'dst'). "
+        "Ensure that each example offers a distinct context, scenario, or usage, avoiding repetition of similar sentences or ideas. "
+        "Include the term's definition in the source language. "
+        "If the term is not in the source language, is invalid, or unrecognized, return an empty JSON object. "
+        f"Format the response as JSON: {{{json_schema_str}}}"
     )
 
-    user_message = f"Translate '{value}' from {src_lang} to {dst_lang}."
+    user_message = f"Term: {value}; Source language: {src_lang}; Destination language: {dst_lang}"
 
     messages = [
         {"role": "system", "content": system_message},
@@ -48,7 +54,7 @@ def translate(
         messages=messages,
         response_format={"type": "json_object"},
         temperature=0,
-        max_tokens=300,
+        max_tokens=400,
         top_p=1,
     )
 
@@ -56,11 +62,11 @@ def translate(
 
     json_object = json.loads(content)
 
-    if not "src" in json_object:
+    if not "corrected_term" in json_object:
         return None
 
     return Translation(
-        src=json_object["src"],
+        src=json_object["corrected_term"],
         dst=[
             Destination(
                 value=dst["value"],
@@ -69,6 +75,7 @@ def translate(
                     for example in dst["examples"]
                 ],
             )
-            for dst in json_object["dst"]
+            for dst in json_object["translations"]
         ],
+        definition=json_object["definition"],
     )

@@ -23,6 +23,7 @@ class Destination:
 class Translation:
     src: str
     dst: list[Destination]
+    definition: str
 
     def get_dst_values(self) -> list[str]:
         return [dst.value for dst in self.dst]
@@ -44,8 +45,8 @@ class Reminder:
 class Chat:
     id: int
     reminders: dict[int, Reminder]
-    reminder_intervals: list[int]
     reminder_next_id: int
+    reminder_intervals: list[int]
     dictionary: Dictionary
 
     def get_reminder_interval(self, reminder: Reminder) -> int:
