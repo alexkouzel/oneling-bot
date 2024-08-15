@@ -8,10 +8,10 @@ from flask import Flask, jsonify
 
 import bot
 
-# load environment variables
+# Load environment variables
 load_dotenv()
 
-# initialize Flask app
+# Initialize Flask app
 app = Flask(__name__)
 
 

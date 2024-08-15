@@ -17,25 +17,25 @@ def time_to_str(value: int) -> str:
 def str_to_time_by_unit(str: str, unit: TimeUnit) -> int:
     (unit_str, unit_value) = unit
 
-    # verify value min size
+    # Verify value min size
     if len(str) <= len(unit_str):
         return -1
 
     time_str = str[: -len(unit_str)]
 
-    # verify that time is not too long (>3 symbols)
+    # Verify that time is not too long (>3 symbols)
     if len(time_str) > 3:
         return -1
 
     try:
-        # try to convert time to an integer
+        # Try to convert time to an integer
         time = int(time_str)
 
-        # check that time is at least 1
+        # Check that time is at least 1
         if time < 1:
             return -1
 
-        # convert time to seconds and return
+        # Convert time to seconds and return
         return time * unit_value
 
     except ValueError:

@@ -8,13 +8,35 @@ class Dictionary:
 
 
 @dataclass
+class Example:
+    src: str
+    dst: str
+
+
+@dataclass
+class Destination:
+    value: str
+    examples: list[Example]
+
+
+@dataclass
+class Translation:
+    src: str
+    dst: list[Destination]
+
+    def get_dst_values(self) -> list[str]:
+        return [dst.value for dst in self.dst]
+
+    def get_examples(self) -> list[Example]:
+        return [example for dst in self.dst for example in dst.examples]
+
+
+@dataclass
 class Reminder:
     id: int
     last_at: int
     left: int
-    text: str
-    translations: list[str]
-    has_examples: bool
+    translation: Translation
     dictionary: Dictionary
 
 
