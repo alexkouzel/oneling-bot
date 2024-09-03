@@ -1,8 +1,7 @@
 import time
-import httpx
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.error import Conflict
+from telegram.error import Conflict, NetworkError
 from telegram.ext import (
     filters,
     MessageHandler,
@@ -530,14 +529,14 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(context.error, Conflict):
         return
 
-    if isinstance(context.error, httpx.ReadError):
+    if isinstance(context.error, NetworkError):
         return
 
-    logger.error("An error occurred: ", exc_info=context.error)
+    logger.error("An error occurred :: ", exc_info=context.error)
 
     # Notify the developer about the error
     await context.bot.send_message(
-        DEVELOPER_CHAT_ID, f"[LOG] An error occurred: {context.error}"
+        DEVELOPER_CHAT_ID, f"[LOG] An error occurred :: {context.error}, type: {type(context.error)}"
     )
 
 
